@@ -11,6 +11,9 @@ export const createOrder = async (req, res) => {
   try {
     const { customerName, phone, address, orderType, items, notes } = req.body;
 
+    console.log('📦 Creating order with phone:', phone);
+    console.log('📦 Full order data:', { customerName, phone, address, orderType, items: items?.length });
+
     if (!customerName || !phone || !items || items.length === 0) {
       return res.status(400).json({ message: "Customer name, phone, and at least one item are required" });
     }
@@ -28,17 +31,19 @@ export const createOrder = async (req, res) => {
     const order = await Order.create({
       orderNumber,
       customerName,
-      phone,
-      address,
-      orderType,
+      phone: phone,  // ✅ Save phone exactly as received
+      address: address || "",
+      orderType: orderType || "Pickup",
       items,
       totalAmount,
-      notes,
+      notes: notes || "",
       paymentStatus: 'pending',
       status: 'Pending'
     });
 
-    console.log('📦 Order created:', order.orderNumber, 'Payment:', order.paymentStatus);
+    console.log('✅ Order created:', order.orderNumber);
+    console.log('📱 Phone saved:', order.phone);
+    console.log('📦 Order:', order);
 
     // Notify admin
     const io = req.app.get("io");
@@ -70,20 +75,34 @@ export const trackOrder = async (req, res) => {
   }
 };
 
-// Get orders by phone number (for user profile)
+// Get orders by phone number (for user profile) - ✅ IMPROVED
 export const getOrdersByPhone = async (req, res) => {
   try {
-    const { phone } = req.query;
+    let { phone } = req.query;
     
-    console.log('📋 Fetching orders for phone:', phone);
+    console.log('📋 Searching for phone:', phone);
     
     if (!phone) {
       return res.status(400).json({ message: 'Phone number is required' });
     }
     
-    const orders = await Order.find({ phone: phone }).sort({ createdAt: -1 });
+    // ✅ Try both formats (with and without +)
+    const cleanPhone = phone.replace(/\+/g, '').replace(/\s/g, '');
+    const phoneWithPlus = '+' + cleanPhone;
+    
+    console.log('📋 Searching with:', { cleanPhone, phoneWithPlus });
+    
+    const orders = await Order.find({
+      $or: [
+        { phone: phone },
+        { phone: cleanPhone },
+        { phone: phoneWithPlus }
+      ]
+    }).sort({ createdAt: -1 });
     
     console.log(`📋 Found ${orders.length} orders for ${phone}`);
+    console.log('📋 Order numbers:', orders.map(o => o.orderNumber));
+    
     res.json(orders);
   } catch (error) {
     console.error('Get orders by phone error:', error);
@@ -102,7 +121,8 @@ export const getOrderByNumber = async (req, res) => {
       return res.status(404).json({ message: 'Order not found' });
     }
     
-    if (order.phone !== phone) {
+    // ✅ Compare with both formats
+    if (order.phone !== phone && order.phone !== phone.replace('+', '') && order.phone !== '+' + phone.replace('+', '')) {
       return res.status(403).json({ message: 'Unauthorized access' });
     }
     

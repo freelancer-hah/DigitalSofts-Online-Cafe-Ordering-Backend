@@ -1,36 +1,23 @@
-import nodemailer from 'nodemailer';
+import sgMail from '@sendgrid/mail';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Create transporter with your credentials
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER || 'alltimefree4793@gmail.com',
-    pass: process.env.EMAIL_PASS || 'ylei yfzt vkwb dbmc'
-  },
-  tls: {
-    rejectUnauthorized: false
-  },
-  timeout: 30000,
-  connectionTimeout: 30000,
-});
+// ✅ Use SendGrid
+const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
+sgMail.setApiKey(SENDGRID_API_KEY);
+
+console.log('📧 SendGrid API Key:', SENDGRID_API_KEY ? '✅ Set' : '❌ Not Set');
 
 // Send Order Confirmation Email
 export const sendOrderConfirmation = async (order, customerEmail) => {
   try {
-    // Check if email is configured
-    if (!process.env.EMAIL_USER && !process.env.EMAIL_PASS) {
-      console.log('📧 Using hardcoded email credentials');
-    }
+    console.log(`📧 Sending confirmation email to ${customerEmail}...`);
 
     if (!customerEmail) {
-      console.log('⚠️ No customer email provided, skipping email');
+      console.log('⚠️ No customer email provided');
       return false;
     }
-
-    console.log(`📧 Sending confirmation email to ${customerEmail}...`);
 
     // Generate order items HTML
     const itemsHtml = order.items.map(item => `
@@ -50,8 +37,11 @@ export const sendOrderConfirmation = async (order, customerEmail) => {
       'Cancelled': '❌'
     };
 
-    const mailOptions = {
+    const FROM_EMAIL = process.env.FROM_EMAIL || 'alltimefree4793@gmail.com';
+
+    const msg = {
       to: customerEmail,
+      from: FROM_EMAIL,
       subject: `🍽️ Order Confirmation #${order.orderNumber}`,
       html: `
         <!DOCTYPE html>
@@ -73,14 +63,12 @@ export const sendOrderConfirmation = async (order, customerEmail) => {
             
             <!-- Content -->
             <div style="padding: 30px 25px;">
-              <!-- Success Message -->
               <div style="text-align: center; margin-bottom: 25px;">
                 <div style="font-size: 48px; margin-bottom: 10px;">🎉</div>
                 <h2 style="color: #1a202c; margin: 0; font-size: 24px;">Thank You for Your Order!</h2>
                 <p style="color: #718096; margin: 5px 0 0 0;">We've received your order and are preparing it with love ❤️</p>
               </div>
               
-              <!-- Order Details -->
               <div style="background: #f7fafc; border-radius: 10px; padding: 20px; margin-bottom: 20px;">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
                   <span style="color: #4a5568; font-weight: 600;">Order Number</span>
@@ -94,13 +82,8 @@ export const sendOrderConfirmation = async (order, customerEmail) => {
                   <span style="color: #4a5568; font-weight: 600;">Order Type</span>
                   <span style="color: #2d3748; font-weight: 700;">${order.orderType === 'Delivery' ? '🚚 Delivery' : '🏪 Pickup'}</span>
                 </div>
-                <div style="display: flex; justify-content: space-between;">
-                  <span style="color: #4a5568; font-weight: 600;">Estimated Time</span>
-                  <span style="color: #2d3748; font-weight: 700;">⏱️ 20-30 minutes</span>
-                </div>
               </div>
               
-              <!-- Items Table -->
               <h3 style="color: #2d3748; font-size: 16px; margin: 20px 0 10px 0;">📋 Order Summary</h3>
               <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
                 <thead>
@@ -122,40 +105,16 @@ export const sendOrderConfirmation = async (order, customerEmail) => {
                 </tfoot>
               </table>
               
-              <!-- Address (if delivery) -->
-              ${order.orderType === 'Delivery' ? `
-                <div style="margin-top: 20px; padding: 15px; background: #f7fafc; border-radius: 8px;">
-                  <h4 style="color: #2d3748; margin: 0 0 5px 0;">📍 Delivery Address</h4>
-                  <p style="color: #4a5568; margin: 0;">${order.address || 'Address not provided'}</p>
-                </div>
-              ` : ''}
-              
-              <!-- Notes -->
-              ${order.notes ? `
-                <div style="margin-top: 15px; padding: 15px; background: #fef3c7; border-radius: 8px; border-left: 4px solid #f59e0b;">
-                  <h4 style="color: #2d3748; margin: 0 0 5px 0;">📝 Special Instructions</h4>
-                  <p style="color: #4a5568; margin: 0; font-style: italic;">${order.notes}</p>
-                </div>
-              ` : ''}
-              
-              <!-- Track Button -->
               <div style="text-align: center; margin-top: 30px;">
-                <a href="${process.env.CLIENT_URL || 'https://elegant-maamoul-bfaab7.netlify.app'}/track/${order.orderNumber}" style="display: inline-block; background: linear-gradient(135deg, #f97316, #ea580c); color: white; padding: 12px 30px; border-radius: 25px; text-decoration: none; font-weight: 600; font-size: 16px;">
+                <a href="https://elegant-maamoul-bfaab7.netlify.app/track/${order.orderNumber}" style="display: inline-block; background: linear-gradient(135deg, #f97316, #ea580c); color: white; padding: 12px 30px; border-radius: 25px; text-decoration: none; font-weight: 600; font-size: 16px;">
                   🔍 Track Your Order
                 </a>
-                <p style="color: #a0aec0; font-size: 12px; margin-top: 10px;">
-                  You can also track your order using this link anytime
-                </p>
               </div>
             </div>
             
-            <!-- Footer -->
             <div style="background: #2d3748; padding: 20px; text-align: center;">
               <p style="color: #a0aec0; margin: 0; font-size: 12px;">
                 © ${new Date().getFullYear()} Spice Corner. All rights reserved.
-              </p>
-              <p style="color: #718096; margin: 5px 0 0 0; font-size: 12px;">
-                Questions? Contact us at <a href="mailto:info@spicecorner.com" style="color: #f97316;">info@spicecorner.com</a>
               </p>
             </div>
           </div>
@@ -164,22 +123,17 @@ export const sendOrderConfirmation = async (order, customerEmail) => {
       `
     };
 
-    const info = await transporter.sendMail(mailOptions);
+    // ✅ Send using SendGrid
+    const response = await sgMail.send(msg);
     console.log(`✅ Email sent successfully to ${customerEmail}`);
-    console.log(`📧 Message ID: ${info.messageId}`);
+    console.log(`📧 Status Code:`, response[0]?.statusCode);
     return true;
 
   } catch (error) {
     console.error('❌ Email error:', error.message);
-    console.error('❌ Full error:', error);
-    
-    if (error.message.includes('Invalid login') || error.message.includes('535')) {
-      console.error('⚠️ Gmail login failed! Please check:');
-      console.error('  1. EMAIL_USER is correct: alltimefree4793@gmail.com');
-      console.error('  2. EMAIL_PASS is the APP PASSWORD (16 chars with spaces)');
-      console.error('  3. 2-Step Verification is enabled on your Google account');
+    if (error.response) {
+      console.error('❌ SendGrid Response:', error.response.body);
     }
-    
     return false;
   }
 };
@@ -205,8 +159,9 @@ export const sendOrderStatusUpdate = async (order, customerEmail) => {
       'Cancelled': 'Your order has been cancelled.'
     };
 
-    const mailOptions = {
+    const msg = {
       to: customerEmail,
+      from: process.env.FROM_EMAIL || 'alltimefree4793@gmail.com',
       subject: `📦 Order #${order.orderNumber} - Status Update`,
       html: `
         <!DOCTYPE html>
@@ -219,12 +174,10 @@ export const sendOrderStatusUpdate = async (order, customerEmail) => {
         <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f9f9f9;">
           <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
             
-            <!-- Header -->
             <div style="background: linear-gradient(135deg, #f97316, #ea580c); padding: 20px; text-align: center;">
               <h1 style="color: white; margin: 0; font-size: 24px;">🍽️ Spice Corner</h1>
             </div>
             
-            <!-- Content -->
             <div style="padding: 25px;">
               <h2 style="color: #2d3748;">Order Status Update</h2>
               
@@ -242,21 +195,13 @@ export const sendOrderStatusUpdate = async (order, customerEmail) => {
                 <span style="font-weight: 700;">Rs ${order.totalAmount}</span>
               </div>
               
-              ${order.orderType === 'Delivery' && order.address ? `
-                <div style="display: flex; justify-content: space-between; padding: 10px 0; border-top: 1px solid #eee; margin-top: 10px;">
-                  <span style="color: #4a5568;">📍 Delivery Address</span>
-                  <span style="font-weight: 700; text-align: right; max-width: 200px;">${order.address}</span>
-                </div>
-              ` : ''}
-              
               <div style="text-align: center; margin-top: 25px;">
-                <a href="${process.env.CLIENT_URL || 'https://elegant-maamoul-bfaab7.netlify.app'}/track/${order.orderNumber}" style="display: inline-block; background: #f97316; color: white; padding: 10px 25px; border-radius: 25px; text-decoration: none; font-weight: 600;">
+                <a href="https://elegant-maamoul-bfaab7.netlify.app/track/${order.orderNumber}" style="display: inline-block; background: #f97316; color: white; padding: 10px 25px; border-radius: 25px; text-decoration: none; font-weight: 600;">
                   🔍 Track Your Order
                 </a>
               </div>
             </div>
             
-            <!-- Footer -->
             <div style="background: #2d3748; padding: 15px; text-align: center;">
               <p style="color: #a0aec0; margin: 0; font-size: 12px;">© ${new Date().getFullYear()} Spice Corner</p>
             </div>
@@ -266,7 +211,7 @@ export const sendOrderStatusUpdate = async (order, customerEmail) => {
       `
     };
 
-    await transporter.sendMail(mailOptions);
+    await sgMail.send(msg);
     console.log(`✅ Status update email sent to ${customerEmail}`);
     return true;
 

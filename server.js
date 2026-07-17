@@ -13,6 +13,9 @@ import authRoutes from './routes/authRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
+import churnRoutes from './routes/churnRoutes.js';
+
+// Add this route
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -88,6 +91,9 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/payments', paymentRoutes);
+
+app.use('/api/churn', churnRoutes);
+
 
 app.use((err, req, res, next) => {
   console.error('Error:', err.stack);

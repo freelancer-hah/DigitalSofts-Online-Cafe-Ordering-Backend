@@ -89,7 +89,6 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/payments', paymentRoutes);
-app.use('/api/recommendations', recommendationRoutes);
 
 app.use((err, req, res, next) => {
   console.error('Error:', err.stack);

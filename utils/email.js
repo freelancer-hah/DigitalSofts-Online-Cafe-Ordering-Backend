@@ -3,21 +3,28 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Create transporter
+// Create transporter with your credentials
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
+    user: process.env.EMAIL_USER || 'alltimefree4793@gmail.com',
+    pass: process.env.EMAIL_PASS || 'ylei yfzt vkwb dbmc'
   },
   tls: {
     rejectUnauthorized: false
-  }
+  },
+  timeout: 30000,
+  connectionTimeout: 30000,
 });
 
 // Send Order Confirmation Email
 export const sendOrderConfirmation = async (order, customerEmail) => {
   try {
+    // Check if email is configured
+    if (!process.env.EMAIL_USER && !process.env.EMAIL_PASS) {
+      console.log('📧 Using hardcoded email credentials');
+    }
+
     if (!customerEmail) {
       console.log('⚠️ No customer email provided, skipping email');
       return false;
@@ -83,16 +90,14 @@ export const sendOrderConfirmation = async (order, customerEmail) => {
                   <span style="color: #4a5568; font-weight: 600;">Status</span>
                   <span style="color: #2d3748; font-weight: 700;">${statusEmoji[order.status] || ''} ${order.status}</span>
                 </div>
-                <div style="display: flex; justify-content: space-between;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
                   <span style="color: #4a5568; font-weight: 600;">Order Type</span>
                   <span style="color: #2d3748; font-weight: 700;">${order.orderType === 'Delivery' ? '🚚 Delivery' : '🏪 Pickup'}</span>
                 </div>
-                ${order.orderType === 'Delivery' && order.address ? `
-                  <div style="display: flex; justify-content: space-between; margin-top: 10px; padding-top: 10px; border-top: 1px solid #e2e8f0;">
-                    <span style="color: #4a5568; font-weight: 600;">📍 Delivery Address</span>
-                    <span style="color: #2d3748; font-weight: 700; text-align: right; max-width: 200px;">${order.address}</span>
-                  </div>
-                ` : ''}
+                <div style="display: flex; justify-content: space-between;">
+                  <span style="color: #4a5568; font-weight: 600;">Estimated Time</span>
+                  <span style="color: #2d3748; font-weight: 700;">⏱️ 20-30 minutes</span>
+                </div>
               </div>
               
               <!-- Items Table -->
@@ -117,9 +122,17 @@ export const sendOrderConfirmation = async (order, customerEmail) => {
                 </tfoot>
               </table>
               
+              <!-- Address (if delivery) -->
+              ${order.orderType === 'Delivery' ? `
+                <div style="margin-top: 20px; padding: 15px; background: #f7fafc; border-radius: 8px;">
+                  <h4 style="color: #2d3748; margin: 0 0 5px 0;">📍 Delivery Address</h4>
+                  <p style="color: #4a5568; margin: 0;">${order.address || 'Address not provided'}</p>
+                </div>
+              ` : ''}
+              
               <!-- Notes -->
               ${order.notes ? `
-                <div style="margin-top: 20px; padding: 15px; background: #fef3c7; border-radius: 8px; border-left: 4px solid #f59e0b;">
+                <div style="margin-top: 15px; padding: 15px; background: #fef3c7; border-radius: 8px; border-left: 4px solid #f59e0b;">
                   <h4 style="color: #2d3748; margin: 0 0 5px 0;">📝 Special Instructions</h4>
                   <p style="color: #4a5568; margin: 0; font-style: italic;">${order.notes}</p>
                 </div>
@@ -127,7 +140,7 @@ export const sendOrderConfirmation = async (order, customerEmail) => {
               
               <!-- Track Button -->
               <div style="text-align: center; margin-top: 30px;">
-                <a href="${process.env.CLIENT_URL}/track/${order.orderNumber}" style="display: inline-block; background: linear-gradient(135deg, #f97316, #ea580c); color: white; padding: 12px 30px; border-radius: 25px; text-decoration: none; font-weight: 600; font-size: 16px;">
+                <a href="${process.env.CLIENT_URL || 'https://elegant-maamoul-bfaab7.netlify.app'}/track/${order.orderNumber}" style="display: inline-block; background: linear-gradient(135deg, #f97316, #ea580c); color: white; padding: 12px 30px; border-radius: 25px; text-decoration: none; font-weight: 600; font-size: 16px;">
                   🔍 Track Your Order
                 </a>
                 <p style="color: #a0aec0; font-size: 12px; margin-top: 10px;">
@@ -157,7 +170,16 @@ export const sendOrderConfirmation = async (order, customerEmail) => {
     return true;
 
   } catch (error) {
-    console.error('❌ Email error:', error);
+    console.error('❌ Email error:', error.message);
+    console.error('❌ Full error:', error);
+    
+    if (error.message.includes('Invalid login') || error.message.includes('535')) {
+      console.error('⚠️ Gmail login failed! Please check:');
+      console.error('  1. EMAIL_USER is correct: alltimefree4793@gmail.com');
+      console.error('  2. EMAIL_PASS is the APP PASSWORD (16 chars with spaces)');
+      console.error('  3. 2-Step Verification is enabled on your Google account');
+    }
+    
     return false;
   }
 };
@@ -228,7 +250,7 @@ export const sendOrderStatusUpdate = async (order, customerEmail) => {
               ` : ''}
               
               <div style="text-align: center; margin-top: 25px;">
-                <a href="${process.env.CLIENT_URL}/track/${order.orderNumber}" style="display: inline-block; background: #f97316; color: white; padding: 10px 25px; border-radius: 25px; text-decoration: none; font-weight: 600;">
+                <a href="${process.env.CLIENT_URL || 'https://elegant-maamoul-bfaab7.netlify.app'}/track/${order.orderNumber}" style="display: inline-block; background: #f97316; color: white; padding: 10px 25px; border-radius: 25px; text-decoration: none; font-weight: 600;">
                   🔍 Track Your Order
                 </a>
               </div>

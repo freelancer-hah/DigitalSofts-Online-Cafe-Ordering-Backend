@@ -15,6 +15,7 @@ const orderSchema = new mongoose.Schema(
     orderNumber: { type: String, required: true, unique: true },
     customerName: { type: String, required: true },
     phone: { type: String, required: true },
+    email: { type: String, default: "" }, // ✅ ADD THIS FIELD
     address: { type: String, default: "" },
     orderType: {
       type: String,
@@ -30,10 +31,25 @@ const orderSchema = new mongoose.Schema(
     },
     paymentStatus: {
       type: String,
-      enum: ["pending", "paid", "failed"],
+      enum: ["pending", "paid", "failed", "refunded"],
       default: "pending"
     },
     paymentId: {
+      type: String,
+      default: ""
+    },
+    refundId: {
+      type: String,
+      default: ""
+    },
+    refundReason: {
+      type: String,
+      default: ""
+    },
+    cancelledAt: {
+      type: Date
+    },
+    cancelReason: {
       type: String,
       default: ""
     },

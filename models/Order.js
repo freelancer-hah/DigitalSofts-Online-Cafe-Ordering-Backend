@@ -15,7 +15,7 @@ const orderSchema = new mongoose.Schema(
     orderNumber: { type: String, required: true, unique: true },
     customerName: { type: String, required: true },
     phone: { type: String, required: true },
-    email: { type: String, default: "" }, // ✅ ADD THIS FIELD
+    email: { type: String, default: "" }, // ✅ EMAIL FIELD - MUST EXIST
     address: { type: String, default: "" },
     orderType: {
       type: String,

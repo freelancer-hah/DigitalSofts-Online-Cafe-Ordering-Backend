@@ -1,4 +1,5 @@
 import Order from "../models/Order.js";
+import { sendOrderConfirmation, sendOrderStatusUpdate } from '../utils/email.js';
 
 // Generates a short, human-friendly order number e.g. ORD-4F82A1
 const generateOrderNumber = () => {
@@ -9,10 +10,13 @@ const generateOrderNumber = () => {
 // Public: place a new order
 export const createOrder = async (req, res) => {
   try {
-    const { customerName, phone, address, orderType, items, notes } = req.body;
+    // ✅ IMPORTANT: Extract email from request body
+    const { customerName, phone, email, address, orderType, items, notes } = req.body;
 
-    console.log('📦 Creating order with phone:', phone);
-    console.log('📦 Full order data:', { customerName, phone, address, orderType, items: items?.length });
+    console.log('📦 Creating order...');
+    console.log('📧 Customer email received:', email);
+    console.log('📱 Phone:', phone);
+    console.log('📋 Items:', items?.length);
 
     if (!customerName || !phone || !items || items.length === 0) {
       return res.status(400).json({ message: "Customer name, phone, and at least one item are required" });
@@ -28,10 +32,12 @@ export const createOrder = async (req, res) => {
       orderNumber = generateOrderNumber();
     }
 
+    // ✅ Save order with email
     const order = await Order.create({
       orderNumber,
       customerName,
-      phone: phone,  // ✅ Save phone exactly as received
+      phone: phone,
+      email: email || "",  // ✅ SAVE EMAIL HERE
       address: address || "",
       orderType: orderType || "Pickup",
       items,
@@ -42,8 +48,21 @@ export const createOrder = async (req, res) => {
     });
 
     console.log('✅ Order created:', order.orderNumber);
+    console.log('📧 Email saved:', order.email);
     console.log('📱 Phone saved:', order.phone);
-    console.log('📦 Order:', order);
+
+    // ✅ Send confirmation email if email exists
+    if (order.email && order.email !== '') {
+      console.log(`📧 Sending confirmation email to ${order.email}...`);
+      const emailSent = await sendOrderConfirmation(order, order.email);
+      if (emailSent) {
+        console.log('✅ Confirmation email sent successfully');
+      } else {
+        console.log('⚠️ Failed to send confirmation email');
+      }
+    } else {
+      console.log('⚠️ No email provided, skipping email');
+    }
 
     // Notify admin
     const io = req.app.get("io");
@@ -159,7 +178,7 @@ export const getAllOrders = async (req, res) => {
   }
 };
 
-// Admin: update order status
+// Admin: update order status - ✅ Send email on status change
 export const updateOrderStatus = async (req, res) => {
   try {
     const { status } = req.body;
@@ -176,11 +195,21 @@ export const updateOrderStatus = async (req, res) => {
     );
     if (!order) return res.status(404).json({ message: "Order not found" });
 
+    // ✅ Send status update email if email exists
+    if (order.email && order.email !== '') {
+      console.log(`📧 Sending status update to ${order.email}...`);
+      const emailSent = await sendOrderStatusUpdate(order, order.email);
+      if (emailSent) {
+        console.log('✅ Status update email sent successfully');
+      }
+    }
+
     const io = req.app.get("io");
     if (io) io.emit("order-updated", order);
 
     res.json(order);
   } catch (err) {
+    console.error('Update order status error:', err);
     res.status(500).json({ message: "Server error", error: err.message });
   }
 };

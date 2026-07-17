@@ -13,6 +13,7 @@ import authRoutes from './routes/authRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
+import recommendationRoutes from './routes/recommendationRoutes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,22 +23,22 @@ dotenv.config();
 const app = express();
 const server = http.createServer(app);
 
-// ✅ FIXED: CORS Configuration
+// ✅ Increase server timeout
+server.timeout = 60000; // 60 seconds
+server.keepAliveTimeout = 65000;
+
 const allowedOrigins = [
   process.env.CLIENT_URL,
   'https://elegant-maamoul-bfaab7.netlify.app',
   'http://localhost:5173',
   'http://localhost:3000'
-].filter(Boolean); // Remove undefined values
+].filter(Boolean);
 
 console.log('✅ Allowed origins:', allowedOrigins);
 
-// ✅ CORS middleware - Allow all origins for now (development)
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
-    
     if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
       callback(null, true);
     } else {
@@ -50,7 +51,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
 }));
 
-// ✅ Socket.IO with proper CORS
 const io = new Server(server, {
   cors: {
     origin: function (origin, callback) {
@@ -63,7 +63,9 @@ const io = new Server(server, {
     },
     methods: ['GET', 'POST'],
     credentials: true
-  }
+  },
+  pingTimeout: 60000,
+  pingInterval: 25000,
 });
 app.set('io', io);
 
@@ -74,27 +76,21 @@ io.on('connection', (socket) => {
   });
 });
 
-// ✅ Webhook needs raw body (must be BEFORE express.json())
 app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
-
-// ✅ JSON parser for other routes
-app.use(express.json());
-
-// ✅ Static files
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// ✅ Health check
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
-// ✅ Routes
 app.use('/api/menu', menuRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/recommendations', recommendationRoutes);
 
-// ✅ Error handler
 app.use((err, req, res, next) => {
   console.error('Error:', err.stack);
   res.status(500).json({ message: 'Something went wrong' });
@@ -102,9 +98,11 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 
-// ✅ MongoDB connection
 mongoose
-  .connect(process.env.MONGO_URI)
+  .connect(process.env.MONGO_URI, {
+    serverSelectionTimeoutMS: 30000,
+    socketTimeoutMS: 45000,
+  })
   .then(() => {
     console.log('✅ MongoDB connected');
     server.listen(PORT, () => {

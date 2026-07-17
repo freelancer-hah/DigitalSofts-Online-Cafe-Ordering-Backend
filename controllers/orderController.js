@@ -10,7 +10,6 @@ const generateOrderNumber = () => {
 // Public: place a new order
 export const createOrder = async (req, res) => {
   try {
-    // ✅ IMPORTANT: Extract email from request body
     const { customerName, phone, email, address, orderType, items, notes } = req.body;
 
     console.log('📦 Creating order...');
@@ -37,7 +36,7 @@ export const createOrder = async (req, res) => {
       orderNumber,
       customerName,
       phone: phone,
-      email: email || "",  // ✅ SAVE EMAIL HERE
+      email: email || "",
       address: address || "",
       orderType: orderType || "Pickup",
       items,
@@ -51,15 +50,22 @@ export const createOrder = async (req, res) => {
     console.log('📧 Email saved:', order.email);
     console.log('📱 Phone saved:', order.phone);
 
-    // ✅ Send confirmation email if email exists
+    // ✅ Send confirmation email in BACKGROUND (non-blocking)
     if (order.email && order.email !== '') {
-      console.log(`📧 Sending confirmation email to ${order.email}...`);
-      const emailSent = await sendOrderConfirmation(order, order.email);
-      if (emailSent) {
-        console.log('✅ Confirmation email sent successfully');
-      } else {
-        console.log('⚠️ Failed to send confirmation email');
-      }
+      // Don't await - send in background
+      setTimeout(async () => {
+        try {
+          console.log(`📧 Sending confirmation email to ${order.email}...`);
+          const emailSent = await sendOrderConfirmation(order, order.email);
+          if (emailSent) {
+            console.log('✅ Confirmation email sent successfully');
+          } else {
+            console.log('⚠️ Failed to send confirmation email');
+          }
+        } catch (emailErr) {
+          console.error('❌ Email error:', emailErr.message);
+        }
+      }, 100);
     } else {
       console.log('⚠️ No email provided, skipping email');
     }
@@ -94,7 +100,7 @@ export const trackOrder = async (req, res) => {
   }
 };
 
-// Get orders by phone number (for user profile) - ✅ IMPROVED
+// Get orders by phone number
 export const getOrdersByPhone = async (req, res) => {
   try {
     let { phone } = req.query;
@@ -105,7 +111,6 @@ export const getOrdersByPhone = async (req, res) => {
       return res.status(400).json({ message: 'Phone number is required' });
     }
     
-    // ✅ Try both formats (with and without +)
     const cleanPhone = phone.replace(/\+/g, '').replace(/\s/g, '');
     const phoneWithPlus = '+' + cleanPhone;
     
@@ -120,7 +125,6 @@ export const getOrdersByPhone = async (req, res) => {
     }).sort({ createdAt: -1 });
     
     console.log(`📋 Found ${orders.length} orders for ${phone}`);
-    console.log('📋 Order numbers:', orders.map(o => o.orderNumber));
     
     res.json(orders);
   } catch (error) {
@@ -140,7 +144,6 @@ export const getOrderByNumber = async (req, res) => {
       return res.status(404).json({ message: 'Order not found' });
     }
     
-    // ✅ Compare with both formats
     if (order.phone !== phone && order.phone !== phone.replace('+', '') && order.phone !== '+' + phone.replace('+', '')) {
       return res.status(403).json({ message: 'Unauthorized access' });
     }
@@ -178,7 +181,7 @@ export const getAllOrders = async (req, res) => {
   }
 };
 
-// Admin: update order status - ✅ Send email on status change
+// Admin: update order status
 export const updateOrderStatus = async (req, res) => {
   try {
     const { status } = req.body;
@@ -195,13 +198,19 @@ export const updateOrderStatus = async (req, res) => {
     );
     if (!order) return res.status(404).json({ message: "Order not found" });
 
-    // ✅ Send status update email if email exists
+    // ✅ Send status update in BACKGROUND (non-blocking)
     if (order.email && order.email !== '') {
-      console.log(`📧 Sending status update to ${order.email}...`);
-      const emailSent = await sendOrderStatusUpdate(order, order.email);
-      if (emailSent) {
-        console.log('✅ Status update email sent successfully');
-      }
+      setTimeout(async () => {
+        try {
+          console.log(`📧 Sending status update to ${order.email}...`);
+          const emailSent = await sendOrderStatusUpdate(order, order.email);
+          if (emailSent) {
+            console.log('✅ Status update email sent successfully');
+          }
+        } catch (emailErr) {
+          console.error('❌ Status email error:', emailErr.message);
+        }
+      }, 100);
     }
 
     const io = req.app.get("io");
@@ -214,7 +223,7 @@ export const updateOrderStatus = async (req, res) => {
   }
 };
 
-// Admin: Mark order as paid (for debugging)
+// Admin: Mark order as paid
 export const markOrderAsPaid = async (req, res) => {
   try {
     const { id } = req.params;

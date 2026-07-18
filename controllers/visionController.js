@@ -6,7 +6,9 @@ dotenv.config();
 
 // ✅ Google Gemini API Configuration
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${GEMINI_API_KEY}`;// Universal Recognition with Gemini
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${GEMINI_API_KEY}`;
+
+// ✅ MAIN: Universal Recognition with Gemini - Direct Menu Matching
 export const recognizeFood = async (req, res) => {
   try {
     const { imageBase64 } = req.body;
@@ -29,29 +31,117 @@ export const recognizeFood = async (req, res) => {
 
     console.log(`📋 Menu has ${menuItems.length} items`);
 
-    let imageDescription = '';
-    let predictions = [];
+    // ✅ Prepare menu names list for Gemini
+    const menuNames = menuItems.map(i => i.name);
 
-    // ✅ Try Gemini API if key exists
-    if (GEMINI_API_KEY && GEMINI_API_KEY !== 'your_gemini_api_key_here' && GEMINI_API_KEY.length > 10) {
-      try {
-        imageDescription = await getImageDescription(imageBase64);
-        console.log('📝 Gemini Description:', imageDescription);
-        
-        // Also get labels using Gemini
-        predictions = await getImageLabels(imageBase64);
-        console.log('🏷️ Gemini Labels:', predictions.slice(0, 5));
-      } catch (geminiError) {
-        console.log('⚠️ Gemini API error:', geminiError.message);
-        console.log('🔄 Using fallback detection...');
+    // ✅ Clean base64 data
+    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+
+    // ✅ PROMPT: Tell Gemini to match EXACTLY from menu
+    const prompt = `You are matching a food photo to an exact item from a restaurant menu.
+
+Menu items (choose EXACTLY one of these, character-for-character, or say NONE):
+${menuNames.map(n => `- ${n}`).join('\n')}
+
+Look at the image and reply with ONLY the exact matching menu item name from the list above. If nothing in the list matches the image, reply with exactly: NONE`;
+
+    console.log('📤 Sending to Gemini with menu matching...');
+
+    // ✅ Call Gemini API
+    const response = await axios.post(
+      GEMINI_API_URL,
+      {
+        contents: [{
+          parts: [
+            { text: prompt },
+            { 
+              inline_data: { 
+                mime_type: 'image/jpeg', 
+                data: base64Data 
+              } 
+            }
+          ]
+        }],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 20
+        }
+      },
+      { 
+        headers: { 'Content-Type': 'application/json' }, 
+        timeout: 25000 
       }
+    );
+
+    const rawAnswer = response.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+    console.log('🎯 Gemini picked:', rawAnswer);
+
+    // ✅ Exact match against menu (case-insensitive, trimmed)
+    const matched = menuItems.find(
+      i => i.name.trim().toLowerCase() === rawAnswer.trim().toLowerCase()
+    );
+
+    if (matched) {
+      return res.json({
+        success: true,
+        message: `✅ Detected: ${matched.name}`,
+        item: matched,
+        confidence: 90,
+        model: 'Gemini-1.5-Flash',
+        description: rawAnswer
+      });
     } else {
-      console.log('⚠️ No valid Gemini API key found.');
+      // ✅ If Gemini said "NONE" or didn't match, return suggestions
+      const suggestions = menuNames.slice(0, 8);
+      return res.json({
+        success: false,
+        message: '❌ Could not identify this food item.',
+        suggestions: suggestions,
+        description: rawAnswer === 'NONE' ? 'No matching dish found' : rawAnswer,
+        fallback: true
+      });
     }
 
-    // ✅ If API returned a description, use it to find best match
-    if (imageDescription) {
-      const matchedItem = findBestMatchFromDescription(imageDescription, menuItems);
+  } catch (error) {
+    console.error('❌ Vision recognition error:', error.response?.data || error.message);
+    
+    // ✅ If Gemini fails, use fallback matching
+    console.log('🔄 Using fallback matching...');
+    try {
+      const { imageBase64 } = req.body;
+      const menuItems = await MenuItem.find({ available: true });
+      
+      if (menuItems.length === 0) {
+        return res.status(404).json({ 
+          success: false, 
+          message: 'No menu items found.' 
+        });
+      }
+
+      // ✅ Try to get description from Gemini as fallback
+      let description = '';
+      try {
+        const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+        const descResponse = await axios.post(
+          GEMINI_API_URL,
+          {
+            contents: [{
+              parts: [
+                { text: 'Describe what food you see in this image in 2-3 words.' },
+                { inline_data: { mime_type: 'image/jpeg', data: base64Data } }
+              ]
+            }]
+          },
+          { headers: { 'Content-Type': 'application/json' }, timeout: 15000 }
+        );
+        description = descResponse.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+        console.log('📝 Fallback description:', description);
+      } catch (descError) {
+        console.log('⚠️ Could not get fallback description');
+      }
+
+      // ✅ Find best match from description
+      const matchedItem = findBestMatchFromDescription(description, menuItems);
       
       if (matchedItem && matchedItem.confidence > 50) {
         return res.json({
@@ -59,49 +149,35 @@ export const recognizeFood = async (req, res) => {
           message: `✅ Detected: ${matchedItem.name}`,
           item: matchedItem,
           confidence: matchedItem.confidence,
-          description: imageDescription,
-          model: 'Gemini-2.0-Flash-Lite'
+          description: description || 'Food image detected',
+          model: 'fallback'
+        });
+      } else {
+        const suggestions = menuItems.slice(0, 8).map(i => i.name);
+        return res.json({
+          success: false,
+          message: '❌ Could not identify. Please select from suggestions:',
+          suggestions: suggestions,
+          description: description || 'No description available',
+          fallback: true
         });
       }
-    }
-
-    // ✅ If no match from API, try fallback matching
-    const matchedItem = findBestMatchUniversal(imageDescription, predictions, menuItems);
-    
-    if (matchedItem && matchedItem.confidence > 40) {
-      return res.json({
-        success: true,
-        message: `✅ Detected: ${matchedItem.name}`,
-        item: matchedItem,
-        confidence: matchedItem.confidence,
-        description: imageDescription || 'Food image detected',
-        model: 'fallback'
-      });
-    } else {
-      const suggestions = menuItems.slice(0, 8).map(i => i.name);
-      return res.json({
-        success: false,
-        message: '❌ Could not identify. Please select from suggestions:',
-        suggestions: suggestions,
-        description: imageDescription || 'No description available',
-        fallback: true
+    } catch (fallbackError) {
+      console.error('❌ Fallback error:', fallbackError.message);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Error processing image. Please try again.' 
       });
     }
-
-  } catch (error) {
-    console.error('❌ Vision recognition error:', error);
-    res.status(500).json({ message: error.message });
   }
 };
 
-// ✅ Get image description using Gemini
+// ✅ Get image description using Gemini (Fallback)
 const getImageDescription = async (imageBase64) => {
   try {
-    // Strip data URI prefix if present
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
 
-    console.log('📤 Sending to Gemini...');
-    console.log('📊 Image size:', base64Data.length, 'chars');
+    console.log('📤 Sending to Gemini for description...');
 
     const response = await axios.post(
       GEMINI_API_URL,
@@ -110,7 +186,7 @@ const getImageDescription = async (imageBase64) => {
           {
             parts: [
               {
-                text: 'Identify the food dish in this image. Reply with ONLY the dish name (2-4 words), nothing else. If it looks like a South Asian/Pakistani dish, name it specifically (e.g. Gulab Jamun, Chicken Biryani, Seekh Kebab, Nihari, Gol Gappa). If multiple dishes are visible, name the main one.'
+                text: 'Identify the food dish in this image. Reply with ONLY the dish name (2-4 words), nothing else.'
               },
               {
                 inline_data: {
@@ -132,17 +208,12 @@ const getImageDescription = async (imageBase64) => {
       }
     );
 
-    console.log('📥 Gemini Response status:', response.status);
-
     const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
     console.log('📝 Model response:', text);
     
     return text.trim();
   } catch (error) {
-    console.error('❌ Gemini error:');
-    console.error('📊 Status:', error.response?.status);
-    console.error('📊 Data:', error.response?.data);
-    console.error('📊 Message:', error.message);
+    console.error('❌ Gemini description error:', error.response?.data || error.message);
     return '';
   }
 };
@@ -297,7 +368,7 @@ const findBestMatchUniversal = (description, predictions, menuItems) => {
       note: 'No clear match found - suggesting popular item'
     };
   }
-console.log('🎯 Best match:', bestMatch?.name, '| Score:', bestScore);
+  console.log('🎯 Best match (fallback):', bestMatch?.name, '| Score:', bestScore);
   return bestMatch;
 };
 
@@ -321,7 +392,7 @@ export const recognizeFoodSimple = async (req, res) => {
       });
     }
 
-    // Try Gemini
+    // Try Gemini for description
     let description = '';
     if (GEMINI_API_KEY && GEMINI_API_KEY !== 'your_gemini_api_key_here') {
       try {

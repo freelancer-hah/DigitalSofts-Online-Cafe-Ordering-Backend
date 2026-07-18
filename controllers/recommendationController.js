@@ -1,43 +1,87 @@
 import Order from '../models/Order.js';
 import MenuItem from '../models/MenuItem.js';
+import User from '../models/User.js';
 
 // Get personalized recommendations for a customer
 export const getPersonalizedRecommendations = async (req, res) => {
   try {
-    const customerPhone = req.user?.phone || req.params.phone || req.query.phone;
-    
-    if (!customerPhone) {
-      return res.status(400).json({ message: 'Customer phone required' });
+    // Get user ID from authenticated user
+    const userId = req.user?.id;
+    const userEmail = req.user?.email;
+    let customerPhone = req.params.phone || req.query.phone;
+
+    console.log('👤 User ID:', userId);
+    console.log('📧 User Email:', userEmail);
+    console.log('📱 Phone from params:', customerPhone);
+
+    let orders = [];
+
+    // PRIORITY 1: Find orders by user ID (if user is logged in)
+    if (userId) {
+      const user = await User.findById(userId);
+      if (user) {
+        console.log('👤 User found:', user.email);
+        
+        if (user.phone) {
+          customerPhone = user.phone.replace(/\+/g, '').replace(/\s/g, '');
+          orders = await Order.find({ 
+            $or: [
+              { phone: user.phone },
+              { phone: '+' + user.phone },
+              { phone: customerPhone }
+            ]
+          }).sort({ createdAt: -1 });
+        }
+        
+        if (orders.length === 0 && user.email) {
+          orders = await Order.find({ 
+            customerEmail: user.email 
+          }).sort({ createdAt: -1 });
+        }
+      }
     }
 
-    console.log('📊 Generating recommendations for:', customerPhone);
+    // PRIORITY 2: Find orders by phone (if provided)
+    if (orders.length === 0 && customerPhone) {
+      const cleanPhone = customerPhone.replace(/\+/g, '').replace(/\s/g, '');
+      orders = await Order.find({ 
+        $or: [
+          { phone: cleanPhone },
+          { phone: '+' + cleanPhone },
+          { phone: customerPhone }
+        ]
+      }).sort({ createdAt: -1 });
+    }
 
-    // 1. Get customer order history - ✅ FIXED: Simple phone search
-    const orders = await Order.find({ 
-      phone: customerPhone
-    }).sort({ createdAt: -1 });
+    // PRIORITY 3: Find orders by email (if user is logged in)
+    if (orders.length === 0 && userEmail) {
+      orders = await Order.find({ 
+        customerEmail: userEmail 
+      }).sort({ createdAt: -1 });
+    }
 
-    console.log(`📦 Found ${orders.length} orders for customer`);
+    console.log(`📦 Found ${orders.length} total orders for customer`);
 
     if (orders.length === 0) {
-      // New customer - show popular items
       const popularItems = await getPopularItems();
       return res.json({
         type: 'popular',
         title: '🔥 Most Popular Dishes',
         items: popularItems,
-        reason: 'New customer - showing most popular dishes'
+        reason: 'Welcome! Here are our most popular dishes',
+        stats: {
+          totalOrders: 0,
+          favoriteCategory: 'None',
+          averageOrder: 0
+        }
       });
     }
 
-    // 2. Analyze order patterns
     const analysis = await analyzeOrderHistory(orders);
     console.log('📊 Analysis:', analysis);
     
-    // 3. Generate recommendations
     const recommendations = await generateRecommendations(analysis, orders);
 
-    // 4. Add personalized message
     let title = '🎯 Recommended for You';
     if (analysis.totalOrders >= 5) {
       title = `🌟 Based on Your ${analysis.totalOrders} Orders`;
@@ -70,7 +114,6 @@ const analyzeOrderHistory = async (orders) => {
   let totalSpent = 0;
   let totalItems = 0;
 
-  // Get all menu items for category mapping
   const allMenuItems = await MenuItem.find();
   const itemCategoryMap = {};
   allMenuItems.forEach(item => {
@@ -80,22 +123,18 @@ const analyzeOrderHistory = async (orders) => {
   orders.forEach(order => {
     totalSpent += order.totalAmount;
     order.items.forEach(item => {
-      // Count item frequency
       const key = item.name.toLowerCase();
       itemFrequency[key] = (itemFrequency[key] || 0) + item.quantity;
       totalItems += item.quantity;
 
-      // Count category frequency
       const category = itemCategoryMap[key] || 'Other';
       categoryFrequency[category] = (categoryFrequency[category] || 0) + item.quantity;
     });
   });
 
-  // Find most ordered items
   const sortedItems = Object.entries(itemFrequency)
     .sort((a, b) => b[1] - a[1]);
 
-  // Find favorite category
   const sortedCategories = Object.entries(categoryFrequency)
     .sort((a, b) => b[1] - a[1]);
 
@@ -114,28 +153,24 @@ const generateRecommendations = async (analysis, orders) => {
   const recommendations = [];
   const addedNames = new Set();
   
-  // Get all available menu items
   const allMenuItems = await MenuItem.find({ available: true });
 
-  // 1. Similar items to top ordered items (Category-based)
+  // 1. Similar items
   const topItemNames = analysis.topItems.map(item => item.name);
   const topItemCategories = new Set();
   
-  // Get categories of top items
   allMenuItems.forEach(item => {
     if (topItemNames.includes(item.name.toLowerCase())) {
       topItemCategories.add(item.category);
     }
   });
 
-  // Find similar items in same categories
   const similarItems = allMenuItems.filter(item => 
     !topItemNames.includes(item.name.toLowerCase()) &&
     topItemCategories.has(item.category) &&
     item.available
   );
 
-  // Add similar items (max 2)
   similarItems.forEach(item => {
     if (recommendations.length < 2 && !addedNames.has(item.name)) {
       recommendations.push({
@@ -146,7 +181,7 @@ const generateRecommendations = async (analysis, orders) => {
     }
   });
 
-  // 2. Frequently bought together (from order history)
+  // 2. Frequently bought together
   const combos = await getFrequentlyBoughtTogether(orders);
   combos.forEach(item => {
     if (recommendations.length < 4 && !addedNames.has(item.name)) {
@@ -158,7 +193,7 @@ const generateRecommendations = async (analysis, orders) => {
     }
   });
 
-  // 3. Popular items (global) - fill remaining slots
+  // 3. Popular items
   if (recommendations.length < 4) {
     const popularItems = await getPopularItems();
     popularItems.forEach(item => {
@@ -175,7 +210,7 @@ const generateRecommendations = async (analysis, orders) => {
   return recommendations.slice(0, 6);
 };
 
-// ✅ FIXED: Get popular items (global) - No regex issues
+// Get popular items (global)
 const getPopularItems = async () => {
   try {
     const orders = await Order.find();
@@ -188,19 +223,16 @@ const getPopularItems = async () => {
       });
     });
 
-    // Get top item names
     const sorted = Object.entries(itemCount)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 6)
       .map(item => item[0]);
 
-    // ✅ FIXED: Find items by name using $in with exact matches
     const items = await MenuItem.find({ 
       available: true,
       name: { $in: sorted.map(name => new RegExp('^' + name + '$', 'i')) }
     });
 
-    // If no items found, return random available items
     if (items.length === 0) {
       return await MenuItem.find({ available: true }).limit(6);
     }
@@ -212,7 +244,7 @@ const getPopularItems = async () => {
   }
 };
 
-// ✅ FIXED: Get frequently bought together items - No regex issues
+// Get frequently bought together items
 const getFrequentlyBoughtTogether = async (orders) => {
   try {
     const comboFrequency = {};
@@ -227,7 +259,6 @@ const getFrequentlyBoughtTogether = async (orders) => {
       }
     });
 
-    // Find most common combo
     const sortedCombos = Object.entries(comboFrequency)
       .sort((a, b) => b[1] - a[1]);
 
@@ -235,10 +266,8 @@ const getFrequentlyBoughtTogether = async (orders) => {
       return [];
     }
 
-    // Get items from the most common combo
     const comboItems = sortedCombos[0][0].split('+');
     
-    // ✅ FIXED: Find items by name using $in with exact matches
     const items = await MenuItem.find({
       available: true,
       name: { $in: comboItems.map(name => new RegExp('^' + name + '$', 'i')) }

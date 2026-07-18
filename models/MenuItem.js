@@ -11,6 +11,7 @@ const menuItemSchema = new mongoose.Schema(
       enum: ["Starters", "Main Course", "Beverages", "Desserts", "Fast Food"],
     },
     image: { type: String, default: "" },
+    imagePublicId: { type: String, default: "" }, // ✅ For Cloudinary management
     available: { type: Boolean, default: true },
   },
   { timestamps: true }

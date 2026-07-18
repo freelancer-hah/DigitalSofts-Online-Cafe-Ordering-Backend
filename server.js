@@ -14,6 +14,8 @@ import adminRoutes from './routes/adminRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
 import churnRoutes from './routes/churnRoutes.js';
+import recommendationRoutes from './routes/recommendationRoutes.js';
+import visionRoutes from './routes/visionRoutes.js';
 
 // Add this route
 
@@ -93,6 +95,8 @@ app.use('/api/users', userRoutes);
 app.use('/api/payments', paymentRoutes);
 
 app.use('/api/churn', churnRoutes);
+app.use('/api/recommendations', recommendationRoutes);
+app.use('/api/vision', visionRoutes);
 
 
 app.use((err, req, res, next) => {
@@ -118,3 +122,5 @@ mongoose
     console.error('❌ MongoDB connection error:', err.message);
     process.exit(1);
   });
+
+  

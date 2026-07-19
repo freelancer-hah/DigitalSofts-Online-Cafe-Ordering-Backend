@@ -16,8 +16,10 @@ import paymentRoutes from './routes/paymentRoutes.js';
 import churnRoutes from './routes/churnRoutes.js';
 import recommendationRoutes from './routes/recommendationRoutes.js';
 import visionRoutes from './routes/visionRoutes.js';
+import forecastRoutes from './routes/forecastRoutes.js';
+import cartRoutes from './routes/cartRoutes.js'; // ✅ ADD THIS
 
-// Add this route
+import { startCartRecoveryScheduler } from './utils/cartRecovery.js'; // ✅ ADD THIS
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,7 +30,7 @@ const app = express();
 const server = http.createServer(app);
 
 // ✅ Increase server timeout
-server.timeout = 60000; // 60 seconds
+server.timeout = 60000;
 server.keepAliveTimeout = 65000;
 
 const allowedOrigins = [
@@ -97,7 +99,8 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/churn', churnRoutes);
 app.use('/api/recommendations', recommendationRoutes);
 app.use('/api/vision', visionRoutes);
-
+app.use('/api/forecast', forecastRoutes);
+app.use('/api/cart', cartRoutes); // ✅ ADD THIS
 
 app.use((err, req, res, next) => {
   console.error('Error:', err.stack);
@@ -117,10 +120,10 @@ mongoose
       console.log(`✅ Server running on port ${PORT}`);
       console.log(`✅ Allowed origins:`, allowedOrigins);
     });
+    // ✅ Start cart recovery scheduler
+    startCartRecoveryScheduler();
   })
   .catch((err) => {
     console.error('❌ MongoDB connection error:', err.message);
     process.exit(1);
   });
-
-  

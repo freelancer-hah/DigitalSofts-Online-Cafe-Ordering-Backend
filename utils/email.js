@@ -19,7 +19,6 @@ export const sendOrderConfirmation = async (order, customerEmail) => {
       return false;
     }
 
-    // Generate order items HTML
     const itemsHtml = order.items.map(item => `
       <tr>
         <td style="padding: 8px; border-bottom: 1px solid #eee;">${item.name}</td>
@@ -54,14 +53,12 @@ export const sendOrderConfirmation = async (order, customerEmail) => {
         <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f9f9f9;">
           <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
             
-            <!-- Header -->
             <div style="background: linear-gradient(135deg, #f97316, #ea580c); padding: 30px 20px; text-align: center;">
               <div style="font-size: 48px; margin-bottom: 10px;">🍽️</div>
               <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 700;">Spice Corner</h1>
               <p style="color: #fed7aa; margin: 5px 0 0 0; font-size: 14px;">Authentic Pakistani Cuisine</p>
             </div>
             
-            <!-- Content -->
             <div style="padding: 30px 25px;">
               <div style="text-align: center; margin-bottom: 25px;">
                 <div style="font-size: 48px; margin-bottom: 10px;">🎉</div>
@@ -123,7 +120,6 @@ export const sendOrderConfirmation = async (order, customerEmail) => {
       `
     };
 
-    // ✅ Send using SendGrid
     const response = await sgMail.send(msg);
     console.log(`✅ Email sent successfully to ${customerEmail}`);
     console.log(`📧 Status Code:`, response[0]?.statusCode);
@@ -217,6 +213,126 @@ export const sendOrderStatusUpdate = async (order, customerEmail) => {
 
   } catch (error) {
     console.error('❌ Status email error:', error);
+    return false;
+  }
+};
+
+// ✅ SEND ABANDONED CART RECOVERY EMAIL
+export const sendAbandonedCartEmail = async (cart) => {
+  try {
+    if (!cart.customerEmail) {
+      console.log('⚠️ No email provided for abandoned cart');
+      return false;
+    }
+
+    console.log(`📧 Sending abandoned cart recovery email to ${cart.customerEmail}...`);
+
+    const itemsHtml = cart.items.map(item => `
+      <tr>
+        <td style="padding: 8px; border-bottom: 1px solid #eee;">${item.name}</td>
+        <td style="padding: 8px; text-align: center; border-bottom: 1px solid #eee;">${item.quantity}</td>
+        <td style="padding: 8px; text-align: right; border-bottom: 1px solid #eee;">Rs ${item.price}</td>
+        <td style="padding: 8px; text-align: right; border-bottom: 1px solid #eee;">Rs ${item.price * item.quantity}</td>
+      </tr>
+    `).join('');
+
+    const msg = {
+      to: cart.customerEmail,
+      from: process.env.FROM_EMAIL || 'alltimefree4793@gmail.com',
+      subject: `👋 Forgot something? Your cart at Spice Corner is waiting!`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Your Cart is Waiting</title>
+        </head>
+        <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f9f9f9;">
+          <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+            
+            <div style="background: linear-gradient(135deg, #f97316, #ea580c); padding: 30px 20px; text-align: center;">
+              <div style="font-size: 48px; margin-bottom: 10px;">🍽️</div>
+              <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 700;">Spice Corner</h1>
+              <p style="color: #fed7aa; margin: 5px 0 0 0; font-size: 14px;">Your cart is waiting for you!</p>
+            </div>
+            
+            <div style="padding: 30px 25px;">
+              <div style="text-align: center; margin-bottom: 25px;">
+                <div style="font-size: 48px; margin-bottom: 10px;">👋</div>
+                <h2 style="color: #1a202c; margin: 0; font-size: 24px;">Hey ${cart.customerName || 'there'}!</h2>
+                <p style="color: #718096; margin: 5px 0 0 0;">We noticed you left some delicious items in your cart</p>
+              </div>
+              
+              <h3 style="color: #2d3748; font-size: 16px; margin: 20px 0 10px 0;">🛒 Your Cart</h3>
+              <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                <thead>
+                  <tr style="background: #f7fafc;">
+                    <th style="padding: 10px; text-align: left; color: #4a5568;">Item</th>
+                    <th style="padding: 10px; text-align: center; color: #4a5568;">Qty</th>
+                    <th style="padding: 10px; text-align: right; color: #4a5568;">Price</th>
+                    <th style="padding: 10px; text-align: right; color: #4a5568;">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${itemsHtml}
+                </tbody>
+                <tfoot>
+                  <tr style="border-top: 2px solid #e2e8f0;">
+                    <td colspan="3" style="padding: 12px; text-align: right; font-weight: 700; font-size: 16px;">Grand Total</td>
+                    <td style="padding: 12px; text-align: right; font-weight: 700; font-size: 18px; color: #f97316;">Rs ${cart.totalAmount}</td>
+                  </tr>
+                </tfoot>
+              </table>
+
+              <div style="margin-top: 25px; padding: 20px; background: #fef3c7; border-radius: 10px; border-left: 4px solid #f59e0b;">
+                <h4 style="color: #92400e; margin: 0 0 10px 0;">💡 Are you facing any issue?</h4>
+                <ul style="color: #78350f; margin: 0; padding-left: 20px; font-size: 14px;">
+                  <li>Payment not working?</li>
+                  <li>Delivery address issue?</li>
+                  <li>Need help with something?</li>
+                </ul>
+                <p style="color: #78350f; margin: 10px 0 0 0; font-weight: 600;">
+                  We're here to help! Reply to this email or contact us at +92 300 1234567
+                </p>
+              </div>
+
+              <div style="text-align: center; margin-top: 25px;">
+                <a href="https://elegant-maamoul-bfaab7.netlify.app/cart" style="display: inline-block; background: linear-gradient(135deg, #f97316, #ea580c); color: white; padding: 14px 35px; border-radius: 25px; text-decoration: none; font-weight: 600; font-size: 16px;">
+                  🛒 Complete Your Order
+                </a>
+                <p style="color: #a0aec0; font-size: 12px; margin-top: 10px;">
+                  Your cart is saved and waiting for you
+                </p>
+              </div>
+
+              <div style="margin-top: 20px; padding: 15px; background: linear-gradient(135deg, #dbeafe, #ede9fe); border-radius: 10px; text-align: center;">
+                <p style="color: #1e40af; margin: 0; font-weight: 600; font-size: 14px;">
+                  🎉 Use code <span style="background: #1e40af; color: white; padding: 2px 10px; border-radius: 5px;">WELCOME10</span> for 10% off your first order!
+                </p>
+              </div>
+            </div>
+            
+            <div style="background: #2d3748; padding: 20px; text-align: center;">
+              <p style="color: #a0aec0; margin: 0; font-size: 12px;">
+                © ${new Date().getFullYear()} Spice Corner. All rights reserved.
+              </p>
+              <p style="color: #4a5568; margin: 5px 0 0 0; font-size: 10px;">
+                If you didn't add items to your cart, please ignore this email.
+              </p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `
+    };
+
+    await sgMail.send(msg);
+    console.log(`✅ Abandoned cart recovery email sent to ${cart.customerEmail}`);
+    return true;
+
+  } catch (error) {
+    console.error('❌ Abandoned cart email error:', error);
     return false;
   }
 };

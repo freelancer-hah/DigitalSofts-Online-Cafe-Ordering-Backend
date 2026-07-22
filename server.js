@@ -17,9 +17,14 @@ import churnRoutes from './routes/churnRoutes.js';
 import recommendationRoutes from './routes/recommendationRoutes.js';
 import visionRoutes from './routes/visionRoutes.js';
 import forecastRoutes from './routes/forecastRoutes.js';
-import cartRoutes from './routes/cartRoutes.js'; // ✅ ADD THIS
+import cartRoutes from './routes/cartRoutes.js';
+import chatRoutes from './routes/chatRoutes.js';
 
-import { startCartRecoveryScheduler } from './utils/cartRecovery.js'; // ✅ ADD THIS
+// ✅ NEW delivery imports
+import riderRoutes from './routes/riderRoutes.js';
+import deliveryRoutes from './routes/deliveryRoutes.js';
+
+import { startCartRecoveryScheduler } from './utils/cartRecovery.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,7 +34,7 @@ dotenv.config();
 const app = express();
 const server = http.createServer(app);
 
-// ✅ Increase server timeout
+// Timeouts
 server.timeout = 60000;
 server.keepAliveTimeout = 65000;
 
@@ -42,6 +47,7 @@ const allowedOrigins = [
 
 console.log('✅ Allowed origins:', allowedOrigins);
 
+// CORS
 app.use(cors({
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
@@ -57,6 +63,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
 }));
 
+// Socket.io
 const io = new Server(server, {
   cors: {
     origin: function (origin, callback) {
@@ -75,33 +82,59 @@ const io = new Server(server, {
 });
 app.set('io', io);
 
+// Socket events for delivery real-time tracking
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
+
+  // Customer joins room to track delivery
+  socket.on('track-order', (orderId) => {
+    socket.join(`order-${orderId}`);
+    console.log(`Socket ${socket.id} joined room order-${orderId}`);
+  });
+
+  socket.on('leave-order', (orderId) => {
+    socket.leave(`order-${orderId}`);
+  });
+
+  // Rider sends location update (alternative to HTTP)
+  socket.on('rider-location', (data) => {
+    const { orderId, lat, lng } = data;
+    io.to(`order-${orderId}`).emit('rider-location-update', { lat, lng });
+  });
+
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
   });
 });
 
+// Middleware
 app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// Health check
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
+// Routes
 app.use('/api/menu', menuRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/payments', paymentRoutes);
-
 app.use('/api/churn', churnRoutes);
 app.use('/api/recommendations', recommendationRoutes);
 app.use('/api/vision', visionRoutes);
 app.use('/api/forecast', forecastRoutes);
-app.use('/api/cart', cartRoutes); // ✅ ADD THIS
+app.use('/api/cart', cartRoutes);
+app.use('/api/chat', chatRoutes);
 
+// ✅ NEW delivery routes
+app.use('/api/riders', riderRoutes);
+app.use('/api/deliveries', deliveryRoutes);
+
+// Error handler
 app.use((err, req, res, next) => {
   console.error('Error:', err.stack);
   res.status(500).json({ message: 'Something went wrong' });
@@ -120,7 +153,6 @@ mongoose
       console.log(`✅ Server running on port ${PORT}`);
       console.log(`✅ Allowed origins:`, allowedOrigins);
     });
-    // ✅ Start cart recovery scheduler
     startCartRecoveryScheduler();
   })
   .catch((err) => {

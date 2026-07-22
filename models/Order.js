@@ -15,7 +15,7 @@ const orderSchema = new mongoose.Schema(
     orderNumber: { type: String, required: true, unique: true },
     customerName: { type: String, required: true },
     phone: { type: String, required: true },
-    email: { type: String, default: "" }, // ✅ EMAIL FIELD - MUST EXIST
+    email: { type: String, default: "" },
     address: { type: String, default: "" },
     orderType: {
       type: String,
@@ -34,26 +34,29 @@ const orderSchema = new mongoose.Schema(
       enum: ["pending", "paid", "failed", "refunded"],
       default: "pending"
     },
-    paymentId: {
-      type: String,
-      default: ""
-    },
-    refundId: {
-      type: String,
-      default: ""
-    },
-    refundReason: {
-      type: String,
-      default: ""
-    },
-    cancelledAt: {
-      type: Date
-    },
-    cancelReason: {
-      type: String,
-      default: ""
-    },
+    paymentId: { type: String, default: "" },
+    refundId: { type: String, default: "" },
+    refundReason: { type: String, default: "" },
+    cancelledAt: { type: Date },
+    cancelReason: { type: String, default: "" },
     notes: { type: String, default: "" },
+
+    // ✅ New delivery fields
+    deliveryStatus: {
+      type: String,
+      enum: ['pending', 'assigned', 'accepted', 'picked_up', 'on_way', 'delivered'],
+      default: 'pending'
+    },
+    riderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Rider' },
+    deliveryAddress: {
+      street: { type: String, default: '' },
+      area: { type: String, default: '' },
+      city: { type: String, default: '' },
+      landmark: { type: String, default: '' },
+      coordinates: { type: [Number], default: [0, 0] } // [longitude, latitude]
+    },
+    deliveryDistance: { type: Number }, // in km
+    deliveryEstimate: { type: Number } // in minutes
   },
   { timestamps: true }
 );

@@ -31,7 +31,7 @@ export const createOrder = async (req, res) => {
       orderNumber = generateOrderNumber();
     }
 
-    // ✅ Save order with email
+    // ✅ Save order with email and deliveryStatus
     const order = await Order.create({
       orderNumber,
       customerName,
@@ -43,16 +43,18 @@ export const createOrder = async (req, res) => {
       totalAmount,
       notes: notes || "",
       paymentStatus: 'pending',
-      status: 'Pending'
+      status: 'Pending',
+      // ✅ Set deliveryStatus based on order type
+      deliveryStatus: orderType === 'Delivery' ? 'pending' : null,
     });
 
     console.log('✅ Order created:', order.orderNumber);
     console.log('📧 Email saved:', order.email);
     console.log('📱 Phone saved:', order.phone);
+    console.log('📦 Delivery status:', order.deliveryStatus);
 
     // ✅ Send confirmation email in BACKGROUND (non-blocking)
     if (order.email && order.email !== '') {
-      // Don't await - send in background
       setTimeout(async () => {
         try {
           console.log(`📧 Sending confirmation email to ${order.email}...`);

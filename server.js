@@ -41,6 +41,7 @@ server.keepAliveTimeout = 65000;
 const allowedOrigins = [
   process.env.CLIENT_URL,
   'https://elegant-maamoul-bfaab7.netlify.app',
+ ' https://digital-softs-online-cafe-ordering-lemon.vercel.app/',
   'http://localhost:5173',
   'http://localhost:3000'
 ].filter(Boolean);

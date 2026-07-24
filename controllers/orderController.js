@@ -10,7 +10,7 @@ const generateOrderNumber = () => {
 // Public: place a new order
 export const createOrder = async (req, res) => {
   try {
-    const { customerName, phone, email, address, orderType, items, notes } = req.body;
+    const { customerName, phone, email, address, orderType, items, notes, deliveryAddress } = req.body;
 
     console.log('📦 Creating order...');
     console.log('📧 Customer email received:', email);
@@ -31,13 +31,20 @@ export const createOrder = async (req, res) => {
       orderNumber = generateOrderNumber();
     }
 
-    // ✅ Save order with email and deliveryStatus
+    // Prepare deliveryAddress object if provided or fallback to address text
+    const formattedDeliveryAddress = deliveryAddress || {
+      street: address || "",
+      coordinates: [0, 0]
+    };
+
+    // ✅ Save order with email, deliveryAddress, and deliveryStatus
     const order = await Order.create({
       orderNumber,
       customerName,
       phone: phone,
       email: email || "",
       address: address || "",
+      deliveryAddress: formattedDeliveryAddress,
       orderType: orderType || "Pickup",
       items,
       totalAmount,

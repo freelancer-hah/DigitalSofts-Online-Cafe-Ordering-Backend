@@ -179,7 +179,7 @@ export const getRiderDeliveries = async (req, res) => {
   try {
     const riderId = req.user.id;
     const deliveries = await Delivery.find({ riderId })
-      .populate('orderId', 'orderNumber customerName totalAmount address')
+      .populate('orderId', 'orderNumber customerName totalAmount address deliveryAddress deliveryStatus')
       .sort({ createdAt: -1 });
     res.json(deliveries);
   } catch (error) {
@@ -200,12 +200,40 @@ export const getAllDeliveries = async (req, res) => {
   }
 };
 
-// ✅ Get delivery by order ID (for customer tracking)
+// ✅ Get delivery by order ID or Order Number (for customer tracking)
 export const getDeliveryByOrder = async (req, res) => {
   try {
     const { orderId } = req.params;
-    const delivery = await Delivery.findOne({ orderId })
+    let delivery = await Delivery.findOne({ orderId })
+      .populate('orderId', 'orderNumber customerName totalAmount address deliveryAddress deliveryStatus')
       .populate('riderId', 'name phone rating location');
+
+    if (!delivery) {
+      // Try searching if orderId is orderNumber e.g. ORD-XXXXXX
+      const order = await Order.findOne({ orderNumber: orderId })
+        .populate('riderId', 'name phone rating location');
+
+      if (order) {
+        delivery = await Delivery.findOne({ orderId: order._id })
+          .populate('orderId', 'orderNumber customerName totalAmount address deliveryAddress deliveryStatus')
+          .populate('riderId', 'name phone rating location');
+
+        // Fallback: If no separate Delivery record exists, build one dynamically from Order
+        if (!delivery && (order.orderType === 'Delivery' || order.riderId || order.deliveryStatus)) {
+          delivery = {
+            _id: order._id,
+            orderId: order,
+            riderId: order.riderId || { name: 'Assigned Captain', phone: '—', rating: 5 },
+            status: order.deliveryStatus || 'on_way',
+            locationHistory: order.riderId?.location?.coordinates ? [{
+              lat: order.riderId.location.coordinates[1],
+              lng: order.riderId.location.coordinates[0]
+            }] : []
+          };
+        }
+      }
+    }
+
     if (!delivery) {
       return res.status(404).json({ message: 'Delivery not found' });
     }
@@ -221,7 +249,7 @@ export const updateLocationHistory = async (req, res) => {
     const { deliveryId } = req.params;
     const { lat, lng } = req.body;
 
-    const delivery = await Delivery.findById(deliveryId);
+    const delivery = await Delivery.findById(deliveryId).populate('orderId');
     if (!delivery) {
       return res.status(404).json({ message: 'Delivery not found' });
     }
@@ -238,7 +266,16 @@ export const updateLocationHistory = async (req, res) => {
     });
 
     const io = req.app.get('io');
-    io.to(`order-${delivery.orderId}`).emit('rider-location-update', { lat, lng });
+    if (io) {
+      const orderObjId = delivery.orderId?._id || delivery.orderId;
+      const orderNum = delivery.orderId?.orderNumber;
+
+      io.to(`order-${orderObjId}`).emit('rider-location-update', { lat, lng, deliveryId });
+      if (orderNum) {
+        io.to(`order-${orderNum}`).emit('rider-location-update', { lat, lng, deliveryId });
+      }
+      io.emit('global-rider-location-update', { deliveryId, orderId: orderObjId, orderNumber: orderNum, lat, lng });
+    }
 
     res.json({ success: true });
   } catch (error) {
